@@ -8,7 +8,7 @@ struct StatEntry {
     header:     String,
     title:      String,
     time:       String,
-    subtitles:  Vec<StatSubtitleEntry>
+    subtitles:  Option<Vec<StatSubtitleEntry>>
 }
 
 #[derive(Deserialize)]
@@ -41,17 +41,18 @@ pub async fn parse(input: &str, conf: &ProgramArgs) -> (Vec<String>, Vec<String>
     let mut songs = Vec::default();
     let mut ids_to_process = Vec::default();
 
-    let year = chrono::Utc::now().year();
+    let year = conf.year.unwrap();
     for entry in entries {
         if !entry.header.eq("YouTube Music") {
             continue;
         }
 
-        let title = entry.title.clone().substring(8).to_string();
         let time = chrono::DateTime::parse_from_rfc3339(&entry.time).unwrap();
-        if time.year() < year {
+        if time.year() as u64 != year {
             continue;
         }
+
+        let title = entry.title.clone().substring(8).to_string();
 
         if title.starts_with("https://") {
             let id = title.substring(32);
@@ -59,7 +60,7 @@ pub async fn parse(input: &str, conf: &ProgramArgs) -> (Vec<String>, Vec<String>
         } else {
             let artist = {
                 let mut artist= String::default();
-                for subtitle in entry.subtitles {
+                for subtitle in entry.subtitles.unwrap() {
                     artist = subtitle.name;
                 }
 
@@ -111,7 +112,8 @@ pub async fn parse(input: &str, conf: &ProgramArgs) -> (Vec<String>, Vec<String>
 }
 
 fn fix_artist_name(i: String) -> String {
-    let i = i.split("-").collect::<Vec<&str>>().get(0).unwrap();
+    let i = i.split("-").collect::<Vec<&str>>();
+    let i = i.get(0).unwrap();
     let i = i.split(" ").collect::<Vec<&str>>();
 
     let mut artist = Vec::new();
@@ -126,10 +128,26 @@ fn fix_artist_name(i: String) -> String {
         let a = artist.replace("VEVO", "");
         let a = a.to_uppercase();
 
-        let regex = regex::Regex::new(r#"(?<!_)(?=[A-Z])"#).unwrap();
+        let chars: Vec<char> = a.chars().collect();
+        let mut str = String::new();
+        for i in 0..chars.len() {
+            let curr_char = chars.get(i).unwrap();
 
-        let a = a.chars().nth(1).unwrap().to_string() + &regex.replace_all(&a, "").to_string();
-        a
+            if i == 0 {
+                str.push(curr_char.to_ascii_uppercase());
+                continue;
+            }
+
+            let prev_char = chars.get(i-1).unwrap();
+            if *prev_char == ' ' {
+                str.push(curr_char.to_ascii_uppercase());
+                continue;
+            }
+
+            str.push(curr_char.to_ascii_lowercase());
+        }
+
+        str
     };
 
     artist
