@@ -3,6 +3,7 @@ name = "youstat"
 version = "0.1.0"
 authors = ["TheDutchMC <t.debruijn@array21.dev>"]
 edition = "2018"
+description = "YouTube Music listening statistics parser"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,5 +11,9 @@ edition = "2018"
 serde = { version = "1.0.126", features = ["derive"]}
 serde_json = "1.0.64"
 reqwest = { version = "0.11.3", features = ["json"]}
-tokio = { version = "1.6.1", features = ["full"]}
 chrono = "0.4.19"
+clap = "2.33.3"
+
+[dependencies.tokio]
+version = "1.11.0"
+features = ["rt"]

@@ -1,7 +1,8 @@
 use serde::Deserialize;
 use crate::substring::Substring;
 use chrono::Datelike;
-use crate::args::ProgramArgs;
+use crate::Args;
+use std::ops::Deref;
 
 #[derive(Deserialize)]
 struct StatEntry {
@@ -26,23 +27,42 @@ struct ItemEntry {
     snippet: ItemSnippet
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize)]
 struct ItemSnippet {
-    title:      String,
+    title:          String,
 
-    #[serde(rename(deserialize = "channelName"))]
-    channel_name: String
+    #[serde(rename(deserialize = "channelTitle"))]
+    channel_name:   String
 }
 
-pub async fn parse(input: &str, conf: &ProgramArgs) -> (Vec<String>, Vec<String>){
-    let entries: Vec<StatEntry> = serde_json::from_str(input).unwrap();
+#[derive(Eq, PartialEq, Hash, Clone)]
+pub struct Artist(pub String);
+#[derive(Eq, PartialEq, Hash, Clone)]
+pub struct Track(pub String);
+
+impl Deref for Artist {
+    type Target = String;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Deref for Track {
+    type Target = String;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+pub async fn parse(input: &str, conf: &Args<'_>) -> (Vec<Artist>, Vec<Track>) {
+    let mut entries: Vec<StatEntry> = serde_json::from_str(input).unwrap();
 
     let mut artists = Vec::default();
-    let mut songs = Vec::default();
+    let mut tracks = Vec::default();
     let mut ids_to_process = Vec::default();
 
-    let year = conf.year.unwrap();
-    for entry in entries {
+    let year = conf.year;
+    for entry in entries.drain(..) {
         if !entry.header.eq("YouTube Music") {
             continue;
         }
@@ -56,7 +76,7 @@ pub async fn parse(input: &str, conf: &ProgramArgs) -> (Vec<String>, Vec<String>
 
         if title.starts_with("https://") {
             let id = title.substring(32);
-            ids_to_process.push(id.to_string());
+            ids_to_process.push(id);
         } else {
             let artist = {
                 let mut artist= String::default();
@@ -67,8 +87,8 @@ pub async fn parse(input: &str, conf: &ProgramArgs) -> (Vec<String>, Vec<String>
                 fix_artist_name(artist)
             };
 
-            artists.push(artist);
-            songs.push(title);
+            artists.push(Artist(artist));
+            tracks.push(Track(title));
         }
     }
 
@@ -89,7 +109,7 @@ pub async fn parse(input: &str, conf: &ProgramArgs) -> (Vec<String>, Vec<String>
     for id in id_strings {
         let client = reqwest::Client::new();
         let r = client.get("https://youtube.googleapis.com/youtube/v3/videos")
-            .query(&[("key", conf.api_key.as_ref().unwrap().as_str()), ("id", &id), ("part", "snippet")])
+            .query(&[("key", conf.api_key), ("id", id.as_str()), ("part", "snippet")])
             .send()
             .await;
 
@@ -98,28 +118,30 @@ pub async fn parse(input: &str, conf: &ProgramArgs) -> (Vec<String>, Vec<String>
             Err(e) => panic!("{:#?}", e)
         };
 
-        let json: ApiResponse = r.json().await.unwrap();
-        for entry in json.items {
-            let snippet = entry.snippet.clone();
+        let txt = r.text().await.unwrap();
+        let mut json: ApiResponse = serde_json::from_str(&txt).unwrap();
+
+        for entry in json.items.drain(..) {
+            let snippet = entry.snippet;
             let artist = fix_artist_name(snippet.channel_name);
 
-            artists.push(artist);
-            songs.push(snippet.title);
+            artists.push(Artist(artist));
+            tracks.push(Track(snippet.title));
         }
     }
 
-    (artists, songs)
+    (artists, tracks)
 }
 
 fn fix_artist_name(i: String) -> String {
     let i = i.split("-").collect::<Vec<&str>>();
     let i = i.get(0).unwrap();
-    let i = i.split(" ").collect::<Vec<&str>>();
+    let mut i = i.split(" ").collect::<Vec<&str>>();
 
     let mut artist = Vec::new();
-    for e in i {
+    for e in i.drain(..) {
         if e.is_empty() { continue; }
-        artist.push(e.clone());
+        artist.push(e);
     }
 
     let artist: String = artist.join(" ");
