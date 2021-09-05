@@ -4,8 +4,10 @@ version = "0.1.0"
 authors = ["TheDutchMC <t.debruijn@array21.dev>"]
 edition = "2018"
 description = "YouTube Music listening statistics parser"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+repository = "https://github.com/TheDutchMC/youstat"
+homepage = "https://github.com/TheDutchMC/youstat"
+keywords = ["YouTube", "Statistics", "Metrics"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 serde = { version = "1.0.126", features = ["derive"]}
